@@ -1,5 +1,6 @@
 mod analyzer;
 mod config;
+mod conventions;
 mod depgraph;
 mod formatter;
 mod git;
@@ -93,6 +94,8 @@ fn main() {
     let mut all_func_hashes: HashMap<String, Vec<(String, String)>> = HashMap::new();
     let mut all_scans = scanner::ScanResults::default();
 
+    let mut file_languages: HashMap<String, String> = HashMap::new();
+
     for (rel_path, lang_name, analysis, scan) in results {
         stats.files += 1;
         stats.total_lines += analysis.stats.lines;
@@ -124,6 +127,7 @@ fn main() {
         all_scans.hacks.extend(scan.hacks);
         all_scans.security.extend(scan.security);
 
+        file_languages.insert(rel_path.clone(), lang_name.to_string());
         file_metrics.insert(rel_path, analysis);
     }
 
@@ -143,6 +147,7 @@ fn main() {
     let test_map = scanner::map_tests(&all_rel_paths);
     let data_layer = models::detect_data_layer(root_path);
     let key_locations = locations::detect_key_locations_from_paths(&all_rel_paths);
+    let conv = conventions::detect_conventions(&file_metrics, &file_languages);
 
     let output = if json_mode {
         json_output::format_json(
@@ -158,6 +163,7 @@ fn main() {
             &test_map,
             &data_layer,
             &key_locations,
+            &conv,
         )
     } else {
         format_compact(
@@ -173,6 +179,7 @@ fn main() {
             &test_map,
             &data_layer,
             &key_locations,
+            &conv,
         )
     };
 

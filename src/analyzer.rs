@@ -49,12 +49,50 @@ pub struct FileAnalysis {
     pub event_listeners: u32,
     pub event_emitters: u32,
     pub identifiers: HashMap<String, u32>,
+    pub single_quote_count: u32,
+    pub double_quote_count: u32,
+    pub semicolon_lines: u32,
+    pub no_semicolon_lines: u32,
+    pub indent_2space: u32,
+    pub indent_4space: u32,
+    pub indent_tab: u32,
+    pub arrow_fn_count: u32,
+    pub regular_fn_count: u32,
+    pub default_export_count: u32,
+    pub named_export_count: u32,
+    pub named_import_count: u32,
+    pub default_import_count: u32,
 }
 
 pub fn analyze_tree(tree: &Tree, source: &str) -> FileAnalysis {
     let mut analysis = FileAnalysis::default();
     analysis.stats.lines = source.lines().count() as u32;
     traverse(tree.root_node(), source, &mut analysis, 0);
+
+    // Convention detection from source text
+    for line in source.lines() {
+        if line.is_empty() { continue; }
+        // Indent detection
+        if line.starts_with('\t') {
+            analysis.indent_tab += 1;
+        } else if line.starts_with("    ") {
+            analysis.indent_4space += 1;
+        } else if line.starts_with("  ") && !line.starts_with("    ") {
+            analysis.indent_2space += 1;
+        }
+        // Semicolon detection (for JS/TS — caller filters by language)
+        let trimmed = line.trim();
+        if !trimmed.is_empty() && !trimmed.starts_with("//") && !trimmed.starts_with("/*") && !trimmed.starts_with("*") {
+            if trimmed.ends_with(';') {
+                analysis.semicolon_lines += 1;
+            } else if trimmed.ends_with('{') || trimmed.ends_with('}') || trimmed.ends_with(',') || trimmed.ends_with('(') || trimmed.ends_with(')') {
+                // structural lines — don't count for semicolon detection
+            } else {
+                analysis.no_semicolon_lines += 1;
+            }
+        }
+    }
+
     analysis
 }
 
@@ -395,6 +433,43 @@ fn traverse(node: Node, source: &str, analysis: &mut FileAnalysis, depth: u32) {
         let text = node_text(node, source);
         if text.len() < 50 {
             *analysis.identifiers.entry(text.to_string()).or_insert(0) += 1;
+        }
+    }
+
+    // --- Convention detection: quotes ---
+    if kind == "string" || kind == "string_fragment" || kind == "string_literal" {
+        let text = node_text(node, source);
+        if text.starts_with('\'') {
+            analysis.single_quote_count += 1;
+        } else if text.starts_with('"') {
+            analysis.double_quote_count += 1;
+        }
+    }
+
+    // --- Convention detection: arrow vs regular functions ---
+    if kind == "arrow_function" {
+        analysis.arrow_fn_count += 1;
+    } else if kind == "function_declaration" || kind == "function" {
+        analysis.regular_fn_count += 1;
+    }
+
+    // --- Convention detection: export style ---
+    if kind.contains("export") {
+        let text = node_text(node, source);
+        if text.starts_with("export default") {
+            analysis.default_export_count += 1;
+        } else {
+            analysis.named_export_count += 1;
+        }
+    }
+
+    // --- Convention detection: import style ---
+    if kind.contains("import") {
+        let text = node_text(node, source);
+        if text.contains('{') {
+            analysis.named_import_count += 1;
+        } else {
+            analysis.default_import_count += 1;
         }
     }
 

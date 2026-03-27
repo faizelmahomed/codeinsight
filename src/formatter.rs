@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use crate::analyzer::FileAnalysis;
+use crate::conventions::LanguageConventions;
 use crate::depgraph::{DeadCode, DepGraph};
 use crate::git::GitContext;
 use crate::lang::lang_abbrev;
@@ -37,6 +38,7 @@ pub fn format_compact(
     test_map: &TestMap,
     data_layer: &DataLayer,
     key_locations: &KeyLocations,
+    conventions: &[LanguageConventions],
 ) -> String {
     let mut out = String::with_capacity(4096);
 
@@ -291,6 +293,13 @@ pub fn format_compact(
             sec_parts.push(format!("{} in {}", label, locs.join(", ")));
         }
         out.push_str(&format!("Security: {}\n", sec_parts.join(" | ")));
+    }
+
+    // Conventions
+    if !conventions.is_empty() {
+        for conv in conventions {
+            out.push_str(&format!("Conventions[{}]: {}\n", conv.language, conv.conventions.join(", ")));
+        }
     }
 
     out.push('\n');

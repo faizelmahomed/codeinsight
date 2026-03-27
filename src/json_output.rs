@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use crate::analyzer::FileAnalysis;
+use crate::conventions::LanguageConventions;
 use crate::depgraph::{DeadCode, DepGraph};
 use crate::git::GitContext;
 use crate::lang::lang_abbrev;
@@ -54,6 +55,7 @@ pub fn format_json(
     test_map: &TestMap,
     data_layer: &DataLayer,
     key_locations: &KeyLocations,
+    conventions: &[LanguageConventions],
 ) -> String {
     let mut out = String::with_capacity(8192);
     out.push_str("{\n");
@@ -282,7 +284,15 @@ pub fn format_json(
             }
         }
     }
-    out.push_str(&format!("  \"exports\": {}\n", json_str_array(&exported_fns)));
+    out.push_str(&format!("  \"exports\": {},\n", json_str_array(&exported_fns)));
+
+    // conventions
+    out.push_str("  \"conventions\": {");
+    let conv_entries: Vec<String> = conventions.iter().map(|c| {
+        format!("{}: {}", json_str(&c.language), json_str_array(&c.conventions))
+    }).collect();
+    out.push_str(&conv_entries.join(", "));
+    out.push_str("}\n");
 
     out.push_str("}\n");
     out
