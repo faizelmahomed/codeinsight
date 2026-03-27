@@ -127,7 +127,9 @@ fn main() {
         file_metrics.insert(rel_path, analysis);
     }
 
-    let dep_graph = build_dep_graph(&dep_data);
+    let project_ctx = project::analyze_project(root_path);
+    let path_aliases = project::parse_tsconfig_paths(root_path);
+    let dep_graph = build_dep_graph(&dep_data, &path_aliases, &project_ctx.go_modules);
     let dead_code = detect_dead_code(&dep_graph);
 
     let duplicates: Vec<(String, Vec<(String, String)>)> = all_func_hashes
@@ -136,7 +138,6 @@ fn main() {
         .map(|(hash, instances)| (hash, instances))
         .collect();
 
-    let project_ctx = project::analyze_project(root_path);
     let git_ctx = git::analyze_git(root_path);
     let tooling_ctx = tooling::detect_tooling(root_path);
     let test_map = scanner::map_tests(&all_rel_paths);

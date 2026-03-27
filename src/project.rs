@@ -2,6 +2,148 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
+/// Parse tsconfig.json (and subdirectory tsconfigs one level deep) to extract
+/// path alias mappings.  Returns a map like `"@/" -> "src/"`.
+pub fn parse_tsconfig_paths(root: &Path) -> HashMap<String, String> {
+    let mut aliases: HashMap<String, String> = HashMap::new();
+
+    // Collect candidate tsconfig files: root + immediate subdirectories
+    let mut candidates: Vec<std::path::PathBuf> = vec![root.join("tsconfig.json")];
+    if let Ok(entries) = fs::read_dir(root) {
+        for entry in entries.flatten() {
+            if entry.path().is_dir() {
+                candidates.push(entry.path().join("tsconfig.json"));
+            }
+        }
+    }
+
+    for tsconfig_path in &candidates {
+        if let Ok(content) = fs::read_to_string(tsconfig_path) {
+            parse_tsconfig_paths_from_content(&content, &mut aliases);
+        }
+    }
+
+    aliases
+}
+
+fn parse_tsconfig_paths_from_content(content: &str, aliases: &mut HashMap<String, String>) {
+    // Find "paths" object inside "compilerOptions"
+    let compiler_pos = match content.find("\"compilerOptions\"") {
+        Some(p) => p,
+        None => return,
+    };
+    let after_compiler = &content[compiler_pos..];
+
+    // Find the opening brace of compilerOptions value
+    let brace_start = match after_compiler.find('{') {
+        Some(b) => compiler_pos + b,
+        None => return,
+    };
+
+    // Find matching closing brace (simple nesting counter)
+    let co_block = match find_matching_brace(&content[brace_start..]) {
+        Some(end) => &content[brace_start..brace_start + end + 1],
+        None => return,
+    };
+
+    // Find "paths" inside compilerOptions block
+    let paths_pos = match co_block.find("\"paths\"") {
+        Some(p) => p,
+        None => return,
+    };
+    let after_paths = &co_block[paths_pos..];
+
+    let paths_brace = match after_paths.find('{') {
+        Some(b) => b,
+        None => return,
+    };
+
+    let paths_block = match find_matching_brace(&after_paths[paths_brace..]) {
+        Some(end) => &after_paths[paths_brace + 1..paths_brace + end],
+        None => return,
+    };
+
+    // Parse entries like `"@/*": ["./src/*"]` or `"@components/*": ["components/*"]`
+    // Split by lines for simpler parsing
+    for line in paths_block.lines() {
+        let trimmed = line.trim().trim_end_matches(',');
+        // Expect pattern: "alias_pattern": ["replacement_pattern"]
+        if !trimmed.contains(':') {
+            continue;
+        }
+        let parts: Vec<&str> = trimmed.splitn(2, ':').collect();
+        if parts.len() != 2 {
+            continue;
+        }
+        let key = parts[0].trim().trim_matches('"');
+        let val_part = parts[1].trim();
+
+        // Extract the first value from the array ["./src/*"]
+        if !val_part.starts_with('[') {
+            continue;
+        }
+        let inner = val_part
+            .trim_start_matches('[')
+            .trim_end_matches(']')
+            .trim();
+        let first_val = inner
+            .split(',')
+            .next()
+            .unwrap_or("")
+            .trim()
+            .trim_matches('"');
+
+        if key.is_empty() || first_val.is_empty() {
+            continue;
+        }
+
+        // Convert glob patterns to prefix/replacement:
+        //   "@/*"       -> alias_prefix = "@/"
+        //   "./src/*"   -> replacement  = "src/"
+        //   "src/*"     -> replacement  = "src/"
+        let alias_prefix = key.trim_end_matches('*');
+        let replacement = first_val
+            .trim_start_matches("./")
+            .trim_end_matches('*');
+
+        // Ensure both end with /
+        let alias_prefix = if alias_prefix.ends_with('/') {
+            alias_prefix.to_string()
+        } else if alias_prefix.is_empty() {
+            continue;
+        } else {
+            format!("{}/", alias_prefix.trim_end_matches('/'))
+        };
+
+        let replacement = if replacement.ends_with('/') {
+            replacement.to_string()
+        } else if replacement.is_empty() {
+            String::new()
+        } else {
+            format!("{}/", replacement.trim_end_matches('/'))
+        };
+
+        aliases.entry(alias_prefix).or_insert(replacement);
+    }
+}
+
+fn find_matching_brace(s: &str) -> Option<usize> {
+    let mut depth = 0i32;
+    for (i, c) in s.char_indices() {
+        match c {
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(i);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
 #[derive(Default)]
 pub struct ProjectContext {
     pub name: Option<String>,

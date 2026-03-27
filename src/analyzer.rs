@@ -126,6 +126,37 @@ fn traverse(node: Node, source: &str, analysis: &mut FileAnalysis, depth: u32) {
                 }
             }
         }
+
+        // Improvement 5: Dynamic import detection — import('./path')
+        // Look for call_expression where the function part is "import" keyword
+        // tree-sitter may represent dynamic import as call_expression with "import" identifier
+        let full_text = node_text(node, source);
+        if full_text.starts_with("import(") || full_text.starts_with("import (") {
+            // Extract the string argument from inside import('...')
+            if let Some(start_q) = full_text.find(|c: char| c == '\'' || c == '"') {
+                let quote_char = full_text.as_bytes()[start_q] as char;
+                if let Some(end_q) = full_text[start_q + 1..].find(quote_char) {
+                    let path = &full_text[start_q + 1..start_q + 1 + end_q];
+                    if !path.contains("${") && !path.is_empty() {
+                        analysis.import_paths.insert(path.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    // Improvement 4: Rust mod declarations — `mod foo;` (without body)
+    if kind == "mod_item" {
+        let text = node_text(node, source).trim().to_string();
+        // mod foo; has no body block — it ends with semicolon, not braces
+        // mod foo { ... } has a body — we skip those
+        if text.ends_with(';') {
+            // Extract the module name (the identifier child)
+            if let Some(name) = extract_name(node, source) {
+                // Add with special prefix so resolve_import can detect it
+                analysis.import_paths.insert(format!("rust_mod:{}", name));
+            }
+        }
     }
 
     if kind == "assignment_expression" || kind == "expression_statement" {

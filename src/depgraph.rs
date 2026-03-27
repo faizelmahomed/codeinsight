@@ -28,6 +28,8 @@ pub struct DepGraph {
 
 pub fn build_dep_graph(
     file_analysis: &HashMap<String, (HashSet<String>, HashSet<String>)>,
+    path_aliases: &HashMap<String, String>,
+    go_modules: &[String],
 ) -> DepGraph {
     let mut nodes: HashMap<String, DepNode> = HashMap::new();
 
@@ -51,13 +53,105 @@ pub fn build_dep_graph(
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_default();
 
+        let is_go = from_path.ends_with(".go");
+        let is_py = from_path.ends_with(".py");
+
         for imp in &import_paths {
+            // Improvement 4: Rust mod resolution
+            if imp.starts_with("rust_mod:") {
+                let mod_name = &imp["rust_mod:".len()..];
+                let resolved_list = resolve_rust_import(mod_name, from_path, file_analysis);
+                for resolved in resolved_list {
+                    if let Some(node) = nodes.get_mut(&resolved) {
+                        node.imported_by.insert(from_path.clone());
+                    }
+                    if let Some(node) = nodes.get_mut(from_path.as_str()) {
+                        node.imports_from.insert(resolved);
+                    }
+                }
+                continue;
+            }
+
+            // Improvement 2: Go package-level import resolution
+            if is_go {
+                let resolved_list = resolve_go_import(imp, file_analysis, go_modules);
+                if !resolved_list.is_empty() {
+                    for resolved in resolved_list {
+                        if let Some(node) = nodes.get_mut(&resolved) {
+                            node.imported_by.insert(from_path.clone());
+                        }
+                        if let Some(node) = nodes.get_mut(from_path.as_str()) {
+                            node.imports_from.insert(resolved);
+                        }
+                    }
+                    continue;
+                }
+            }
+
+            // Improvement 3: Python import resolution
+            if is_py {
+                let resolved_list = resolve_python_import(imp, &from_dir, file_analysis);
+                if !resolved_list.is_empty() {
+                    for resolved in resolved_list {
+                        if let Some(node) = nodes.get_mut(&resolved) {
+                            node.imported_by.insert(from_path.clone());
+                        }
+                        if let Some(node) = nodes.get_mut(from_path.as_str()) {
+                            node.imports_from.insert(resolved);
+                        }
+                    }
+                    continue;
+                }
+            }
+
+            // Improvement 1: tsconfig path alias resolution (before relative check)
+            if let Some(resolved) = resolve_alias_import(imp, path_aliases, file_analysis) {
+                if let Some(node) = nodes.get_mut(&resolved) {
+                    node.imported_by.insert(from_path.clone());
+                }
+                if let Some(node) = nodes.get_mut(from_path.as_str()) {
+                    node.imports_from.insert(resolved);
+                }
+                continue;
+            }
+
+            // Existing relative import resolution
             if let Some(resolved) = resolve_import(imp, &from_dir, file_analysis) {
                 if let Some(node) = nodes.get_mut(&resolved) {
                     node.imported_by.insert(from_path.clone());
                 }
                 if let Some(node) = nodes.get_mut(from_path.as_str()) {
                     node.imports_from.insert(resolved);
+                }
+            }
+        }
+    }
+
+    // Improvement 6: Barrel re-export tracing (2 passes, limited to 2 levels)
+    for _level in 0..2 {
+        let snapshot: HashMap<String, (HashSet<String>, HashSet<String>)> = nodes
+            .iter()
+            .map(|(k, v)| (k.clone(), (v.imports_from.clone(), v.imported_by.clone())))
+            .collect();
+
+        for (barrel_path, (barrel_imports_from, barrel_imported_by)) in &snapshot {
+            // A potential barrel file: imported by others AND imports from others
+            if barrel_imported_by.is_empty() || barrel_imports_from.is_empty() {
+                continue;
+            }
+            // Add transitive edges: everything that imports the barrel also depends
+            // on everything the barrel imports from
+            for importer in barrel_imported_by {
+                for target in barrel_imports_from {
+                    if importer == target || importer == barrel_path {
+                        continue;
+                    }
+                    if let Some(node) = nodes.get_mut(target.as_str()) {
+                        node.imported_by.insert(importer.clone());
+                    }
+                    if let Some(node) = nodes.get_mut(importer.as_str()) {
+                        node.imports_from.insert(target.clone());
+                    }
                 }
             }
         }
@@ -105,6 +199,10 @@ pub fn build_dep_graph(
             if !imp.starts_with('.') {
                 // Filter out path aliases (e.g. @/ prefix)
                 if imp.starts_with("@/") {
+                    continue;
+                }
+                // Filter out Rust mod markers
+                if imp.starts_with("rust_mod:") {
                     continue;
                 }
                 // Filter out Go local paths
@@ -223,6 +321,223 @@ fn resolve_import(
     }
 
     None
+}
+
+/// Improvement 1: Resolve a path alias import (e.g. `@/components/Button`)
+/// by checking each alias prefix and replacing it with the corresponding directory.
+fn resolve_alias_import(
+    import_path: &str,
+    path_aliases: &HashMap<String, String>,
+    files: &HashMap<String, (HashSet<String>, HashSet<String>)>,
+) -> Option<String> {
+    for (alias_prefix, replacement) in path_aliases {
+        if import_path.starts_with(alias_prefix.as_str()) {
+            let rest = &import_path[alias_prefix.len()..];
+            let resolved_base = format!("{}{}", replacement, rest).replace('\\', "/");
+
+            // Try exact match
+            if files.contains_key(&resolved_base) {
+                return Some(resolved_base);
+            }
+
+            // Try with extensions
+            let exts = [".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs"];
+            let no_ext = resolved_base
+                .trim_end_matches(".js")
+                .trim_end_matches(".ts")
+                .trim_end_matches(".jsx")
+                .trim_end_matches(".tsx")
+                .trim_end_matches(".mjs")
+                .trim_end_matches(".cjs");
+
+            for ext in &exts {
+                let with_ext = format!("{}{}", no_ext, ext);
+                if files.contains_key(&with_ext) {
+                    return Some(with_ext);
+                }
+            }
+
+            // Try index files
+            let idx_exts = ["/index.js", "/index.ts", "/index.jsx", "/index.tsx"];
+            for ext in &idx_exts {
+                let with_idx = format!("{}{}", resolved_base.trim_end_matches('/'), ext);
+                if files.contains_key(&with_idx) {
+                    return Some(with_idx);
+                }
+            }
+
+            // Also try with each top-level directory prefix (for monorepos where
+            // files are stored as "subdir/src/..." in the analysis map)
+            let top_dirs: HashSet<String> = files
+                .keys()
+                .filter_map(|p| {
+                    let normalized = p.replace('\\', "/");
+                    if normalized.contains('/') {
+                        Some(normalized.split('/').next()?.to_string())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            for top in &top_dirs {
+                let prefixed = format!("{}/{}", top, resolved_base);
+
+                if files.contains_key(&prefixed) {
+                    return Some(prefixed);
+                }
+                for ext in &exts {
+                    let with_ext = format!("{}{}", prefixed.trim_end_matches(".js")
+                        .trim_end_matches(".ts")
+                        .trim_end_matches(".jsx")
+                        .trim_end_matches(".tsx"), ext);
+                    if files.contains_key(&with_ext) {
+                        return Some(with_ext);
+                    }
+                }
+                for ext in &idx_exts {
+                    let with_idx = format!("{}{}", prefixed.trim_end_matches('/'), ext);
+                    if files.contains_key(&with_idx) {
+                        return Some(with_idx);
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Improvement 2: Resolve Go package imports.
+/// Go imports reference packages (directories), not files. When file A imports
+/// `github.com/user/repo/internal/handlers`, ALL .go files in the
+/// `internal/handlers/` directory are dependencies.
+fn resolve_go_import(
+    import_path: &str,
+    files: &HashMap<String, (HashSet<String>, HashSet<String>)>,
+    go_modules: &[String],
+) -> Vec<String> {
+    let mut results = Vec::new();
+
+    for module_path in go_modules {
+        if import_path.starts_with(module_path.as_str()) {
+            // Strip the module path to get a relative directory
+            let rest = import_path[module_path.len()..]
+                .trim_start_matches('/')
+                .replace('\\', "/");
+
+            // Find all .go files whose path starts with this directory
+            for file_path in files.keys() {
+                let normalized = file_path.replace('\\', "/");
+                if normalized.ends_with(".go") {
+                    // Check if the file is in this package directory
+                    // The file could be at "rest/something.go" or "topdir/rest/something.go"
+                    // and the file should be directly in the directory (not a subdirectory)
+
+                    // Try direct match: file is at `rest/file.go`
+                    if let Some(parent) = normalized.rsplit_once('/') {
+                        if parent.0 == rest || parent.0.ends_with(&format!("/{}", rest)) {
+                            results.push(file_path.clone());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    results
+}
+
+/// Improvement 3: Resolve Python imports.
+/// Converts dot notation to file paths: `handlers.auth` -> `handlers/auth.py`
+/// Handles both relative (`from . import foo`) and absolute (`from module import thing`).
+fn resolve_python_import(
+    import_path: &str,
+    from_dir: &str,
+    files: &HashMap<String, (HashSet<String>, HashSet<String>)>,
+) -> Vec<String> {
+    let mut results = Vec::new();
+
+    // Convert dot notation to path separator
+    let as_path = import_path.replace('.', "/");
+
+    // Candidate paths to try
+    let mut candidates: Vec<String> = Vec::new();
+
+    // Check relative to the file's directory
+    if !from_dir.is_empty() {
+        candidates.push(format!("{}/{}.py", from_dir, as_path));
+        candidates.push(format!("{}/{}/__init__.py", from_dir, as_path));
+    }
+
+    // Check as absolute from project root
+    candidates.push(format!("{}.py", as_path));
+    candidates.push(format!("{}/__init__.py", as_path));
+
+    // Also try with common top-level directories
+    let top_dirs: HashSet<String> = files
+        .keys()
+        .filter_map(|p| {
+            let normalized = p.replace('\\', "/");
+            if normalized.contains('/') {
+                Some(normalized.split('/').next()?.to_string())
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    for top in &top_dirs {
+        candidates.push(format!("{}/{}.py", top, as_path));
+        candidates.push(format!("{}/{}/__init__.py", top, as_path));
+    }
+
+    for candidate in &candidates {
+        let normalized = candidate.replace('\\', "/");
+        if files.contains_key(&normalized) {
+            if !results.contains(&normalized) {
+                results.push(normalized);
+            }
+        }
+    }
+
+    results
+}
+
+/// Improvement 4: Resolve Rust `mod foo;` declarations.
+/// For `mod foo` in `src/main.rs`, look for `src/foo.rs` or `src/foo/mod.rs`.
+/// For `mod foo` in `src/bar/mod.rs`, look for `src/bar/foo.rs` or `src/bar/foo/mod.rs`.
+fn resolve_rust_import(
+    mod_name: &str,
+    from_path: &str,
+    files: &HashMap<String, (HashSet<String>, HashSet<String>)>,
+) -> Vec<String> {
+    let mut results = Vec::new();
+    let normalized_from = from_path.replace('\\', "/");
+
+    let from_dir = if let Some((dir, _file)) = normalized_from.rsplit_once('/') {
+        dir.to_string()
+    } else {
+        String::new()
+    };
+
+    // Candidate paths
+    let mut candidates: Vec<String> = Vec::new();
+
+    if from_dir.is_empty() {
+        candidates.push(format!("{}.rs", mod_name));
+        candidates.push(format!("{}/mod.rs", mod_name));
+    } else {
+        candidates.push(format!("{}/{}.rs", from_dir, mod_name));
+        candidates.push(format!("{}/{}/mod.rs", from_dir, mod_name));
+    }
+
+    for candidate in &candidates {
+        if files.contains_key(candidate) && !results.contains(candidate) {
+            results.push(candidate.clone());
+        }
+    }
+
+    results
 }
 
 fn detect_circular(nodes: &HashMap<String, DepNode>) -> Vec<Vec<String>> {
