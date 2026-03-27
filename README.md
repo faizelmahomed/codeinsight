@@ -1,5 +1,10 @@
 # codeinsight
 
+[![CI](https://github.com/faizelmahomed/codeinsight/actions/workflows/ci.yml/badge.svg)](https://github.com/faizelmahomed/codeinsight/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Rust](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://www.rust-lang.org/)
+[![Languages](https://img.shields.io/badge/languages-13-green.svg)](#supported-languages)
+
 Fast codebase analyzer powered by tree-sitter. Gives AI coding tools (Claude Code, Cursor, Copilot, etc.) instant, comprehensive project understanding in a single pass.
 
 Built in Rust for speed. Analyzes 500-file projects in under 200ms. Zero runtime dependencies — single static binary.
@@ -92,6 +97,38 @@ codeinsight builds on that foundation with a Rust implementation for faster anal
 | Small CLI tool | 14 | 1,600 | 60ms |
 | Full-stack app (Next.js + Go) | 505 | 90,000 | 180ms |
 | Large plugin ecosystem | 772 | 118,000 | 750ms |
+
+## How it compares
+
+| Feature | codeinsight | tokei / scc / cloc | mcp-thorns | tree-sitter CLI |
+|---|---|---|---|---|
+| Line counting | Yes | Yes | Yes | No |
+| Language detection | Yes | Yes | Yes | Yes |
+| Framework detection | Yes (25+ frameworks) | No | Yes | No |
+| Dependency graph | Yes (cross-language) | No | Yes (JS only) | No |
+| Dead code detection | Yes (framework-aware) | No | Yes | No |
+| Data model detection | Yes (6 ORMs) | No | No | No |
+| Git context | Yes | No | No | No |
+| Convention detection | Yes (per-language) | No | No | No |
+| Security scanning | Yes | No | No | No |
+| Test coverage mapping | Yes | No | No | No |
+| TODO/FIXME scanning | Yes | No | No | No |
+| Key locations map | Yes | No | No | No |
+| tsconfig alias resolution | Yes | No | No | No |
+| Go/Python/Rust imports | Yes | No | No | No |
+| JSON output | Yes | Yes | No | Yes |
+| Caching | Yes | No | No | No |
+| Config file | Yes | Yes | No | No |
+| AI-optimized output | Yes (~900 tokens) | No | Yes (~2500 tokens) | No |
+| Speed (500 files) | ~180ms | ~50ms | ~6-15s | ~200ms |
+| Runtime deps | None (static binary) | None | Node.js + 13 native modules | None |
+| Languages supported | 13 | 200+ | 13 | Per grammar |
+
+**tokei / scc / cloc** are excellent line-counting tools. They answer "how big is this codebase?" but not "what does this codebase do?" — no framework detection, no dependency analysis, no domain model extraction, no conventions.
+
+**mcp-thorns** pioneered the AI-optimized codebase overview concept. codeinsight builds on that idea with Rust for speed, additional analysis capabilities, and a more token-efficient output format.
+
+**tree-sitter CLI** provides raw AST output. codeinsight uses tree-sitter internally but adds the analysis layer on top — extracting meaning, not just structure.
 
 ## Installation
 
