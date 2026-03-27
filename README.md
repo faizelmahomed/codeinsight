@@ -42,6 +42,12 @@ codeinsight outputs a structured markdown report with up to 21 sections, each de
 
 Sections only appear when they have meaningful content. A 3-file project gets a compact report. A 500-file monorepo gets the full analysis.
 
+## Inspired by
+
+codeinsight was inspired by [mcp-thorns](https://github.com/AnEntrypoint/mcp-thorns) — a Node.js codebase analyzer that pioneered the idea of giving AI tools a one-shot project overview using tree-sitter AST analysis. mcp-thorns demonstrated that structured codebase context dramatically improves AI coding assistant performance.
+
+codeinsight builds on that foundation with a Rust implementation for faster analysis, additional detection capabilities (git context, security scanning, test mapping, data model detection), and framework-aware dead code analysis.
+
 ## Performance
 
 | Codebase | Files | Lines | Time |
@@ -49,8 +55,6 @@ Sections only appear when they have meaningful content. A 3-file project gets a 
 | Small CLI tool | 14 | 1,600 | 60ms |
 | Full-stack app (Next.js + Go) | 505 | 90,000 | 180ms |
 | Large plugin ecosystem | 772 | 118,000 | 750ms |
-
-For comparison, the Node.js-based alternative (mcp-thorns) takes 6-15 seconds on the same codebases. codeinsight is 25-45x faster.
 
 ## Installation
 
