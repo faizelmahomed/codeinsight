@@ -8,45 +8,82 @@ Built in Rust for speed. Analyzes 500-file projects in under 200ms. Zero runtime
 
 AI coding assistants waste their first few interactions exploring your codebase — reading package.json, grepping for patterns, checking directory structure. This burns tokens, adds latency, and still produces an incomplete picture.
 
-codeinsight solves this by analyzing your entire codebase in one pass and producing a structured overview that tells the AI everything it needs to know: what frameworks you use, what your data models look like, where the key code lives, what's tested, what's broken, and what's actively being worked on.
+codeinsight solves this by analyzing your entire codebase in one pass and producing a token-efficient overview that tells the AI everything it needs to know: what frameworks you use, what your data models look like, where the key code lives, how code should be written, what's tested, what's broken, and what's actively being worked on.
 
 One command. Under 200ms. The AI starts working immediately instead of exploring.
 
 ## What it produces
 
-codeinsight outputs a structured markdown report with up to 21 sections, each designed to answer a specific question an AI assistant would otherwise need multiple tool calls to figure out:
+codeinsight outputs a compact, LLM-optimized report (~900 tokens for a 500-file project) covering:
 
-| Section | What it answers |
+| What Claude learns | Example |
 |---|---|
-| **Project Info** | What is this project? What version? What type (CLI, web app, library)? |
-| **Quick Start** | How do I run this locally? |
-| **Header** | How big is this codebase? How complex? |
-| **Languages** | What languages is this written in? What's the primary one? |
-| **Tech Stack** | What frameworks and services does this use? (Next.js, Gin, Stripe, Redis, etc.) |
-| **Code Patterns** | Is this async-heavy? How much error handling? What internal functions are most called? |
-| **I/O & Integration** | What env vars are needed? What external APIs are called? What routes exist? |
-| **Features** | How is the code organized by feature area? |
-| **Data Layer** | What are the domain models? Where's the schema? What ORM? |
-| **Key Locations** | Where are the handlers, components, services, middleware, tests? |
-| **Git Context** | What branch? Recent commits? Uncommitted work? What files change most? |
-| **Tooling** | TypeScript strict mode? ESLint? Jest? CI/CD? Docker? |
-| **Developer Notes** | Any TODOs, FIXMEs, or HACKs in the code? |
-| **Security** | Any eval() usage, hardcoded secrets, SQL injection patterns? |
-| **Test Map** | Which files have tests? Which don't? What's the coverage ratio? |
-| **Code Organization** | Which files are too large? Which functions have too many parameters? |
-| **Architecture** | What's the dependency graph? Which files are most connected? Any circular deps? |
-| **API Surface** | What functions are exported? What classes exist? What are the entry points? |
-| **Issues** | Code duplication, oversized files, overly complex functions |
-| **Dead Code** | Unused exports, orphaned files, possibly dead code (framework-aware) |
-| **Modules** | How is the project organized at the top level? |
+| **Project identity** | `Project: creator-store v0.1.0 (web-app)` |
+| **Purpose (from README)** | `About: A stan.store alternative for the Saudi market...` |
+| **Tech stack** | `Stack: Next.js, React, Gin, Stripe, AWS, Tailwind, GORM` |
+| **Scale** | `505 files \| 89.9kL \| Go 41%, TSX 31%, TS 26%` |
+| **How to run** | `Dev: cd creator-store && next dev \| Build: next build \| Test: jest` |
+| **All env vars** | `Env: DATABASE_URL, STRIPE_SECRET_KEY, REDIS_URL, ...` (full list, no caps) |
+| **All API routes** | `Routes: /auth/login, /products/create, /subscriptions/checkout, ...` (full list) |
+| **All domain models** | `Models: User, Store, Product, Subscription, Payout, Block, ...` (full list) |
+| **Where code lives** | `Dirs: src/app(140), internal(123), components(88), handlers(45)` |
+| **Git activity** | `Branch: main \| 4 uncommitted` + hot files |
+| **Developer notes** | `TODO page.tsx:56 "Add sales count from Go backend"` |
+| **Test coverage** | `Tests: 27/478 (5%)` |
+| **Dependencies** | `Deps: react(146), next(103), gorm.io(66), gin(61)` |
+| **Tooling** | `Tooling: ESLint, Prettier, Jest, GitHub Actions, Docker` |
+| **Security signals** | `Security: eval() in 4 test files` |
+| **Coding conventions** | `Conventions[TS]: 2-space, single quotes, arrow functions, named exports` |
+| **Health issues** | `Issues: 40 orphaned, 4 unused exports, 35 large files` |
+| **Exported API** | `Exports: auth-client.ts:33:getCSRFToken, badge.tsx:30:Badge` |
 
-Sections only appear when they have meaningful content. A 3-file project gets a compact report. A 500-file monorepo gets the full analysis.
+Every env var, every route, every model is shown in full — no artificial caps. Claude gets reference data it can use directly, not summaries it has to verify.
+
+The output is designed for LLM consumption: no emojis, no markdown formatting overhead, no legends. Pure data, self-describing labels, minimal tokens.
+
+## Example output
+
+Here's real output from analyzing a full-stack creator store platform (Next.js + Go, 505 files):
+
+<details>
+<summary>Click to expand</summary>
+
+```
+Project: creator-store v0.1.0 (go)
+About: A stan.store alternative built specifically for the Saudi Arabian market. This platform enables creators to build customizable link-in-bio storefronts to sell digital and physical products.
+Stack: Next.js, React, Gin, Stripe, AWS, Tailwind, GORM
+505 files | 89.9kL | Go 41%, TSX 31%, TS 26%, JSON 0%
+Dev: cd creator-store && next dev -p 1234 | Build: cd creator-store && next build | Test: cd creator-store && jest
+
+Env: AWS_ACCESS_KEY_ID, AWS_REGION, AWS_S3_BUCKET, AWS_SECRET_ACCESS_KEY, CI, DATABASE_URL, DOWNLOAD_TOKEN_SECRET, FROM_EMAIL, FROM_NAME, NEXT_PUBLIC_ALLOWED_ORIGINS, NEXT_PUBLIC_API_URL, NEXT_PUBLIC_APP_URL, NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY, NODE_ENV, RESEND_API_KEY, SECRET, SENTRY_ORG, SENTRY_PROJECT, STRIPE_SECRET_KEY, UPSTASH_REDIS_REST_TOKEN, UPSTASH_REDIS_REST_URL
+Routes: /auth/login, /auth/register, /auth/logout, /auth/session, /auth/forgot-password, /auth/reset-password, /auth/verify-email, /user/me, /user/update-profile, /user/change-password, /user/sessions, /products/create, /products/list, /products/update, /products/delete, /subscriptions/plans, /subscriptions/checkout, /subscriptions/cancel, /subscriptions/portal, /blocks, /blocks/create, /blocks/update, /blocks/delete, /payouts/balance, /payouts/request, /payouts/transactions, /stores/check-availability, /stores/create-initial, /stores/me, /orders
+Models: User, Account, Session, Store, StoreCustomization, Product, ProductVariant, Order, OrderItem, Download, Block, BlockClick, Experience, Education, Booking, Integration, Subscription, SubscriptionPlan, SubscriptionInvoice, APIKey, StripeAccount, PayoutRequest, CreatorBalance, EarningsTransaction, Analytics, DiscountCode, Affiliate (+19)
+Schema: go-creator-store/internal/domain/
+
+Dirs: creator-store/src/app(140), go-creator-store/internal(123), creator-store/src/components(88), creator-store/src/lib(69), go-creator-store/internal/handlers(45), creator-store/__tests__(27), go-creator-store/internal/domain(15), go-creator-store/internal/services(12), go-creator-store/internal/middleware(12)
+Branch: main | 4 uncommitted
+Hot: marketplace.json(95), pre-tool-use-hook.js(40), gm.md(21)
+TODO page.tsx:56 "Add sales count from Go backend when available" | TODO webhook.go:358 "Notify store owner"
+Tests: 27/478 (5%)
+Deps: react(146), next(103), gorm.io(66), gin(61), lucide-react(58), framer-motion(29)
+Security: eval() in CVE-008-xss-protection.test.ts:242, file_validator_test.go:794
+Conventions[Go]: tabs, if err != nil, snake_case files
+Conventions[TS]: 4-space, single quotes, no semicolons, arrow functions, named exports, kebab-case files
+Conventions[TSX]: 4-space, no semicolons, arrow functions, named exports, PascalCase files
+
+Issues: 40 orphaned files, 4 unused exports, 22 single-use files, 35 files >500 lines, 161 functions >50 lines, 109 duplicated groups
+Exports: badge.tsx:30:Badge, skeleton.tsx:3:Skeleton, auth-client.ts:33:getCSRFToken, auth-client.ts:49:withCSRFToken
+```
+
+</details>
+
+From this output, an AI assistant instantly knows: this is a **Next.js + Go/Gin** creator store for the Saudi market with **Stripe payments**, **Redis caching**, **46 GORM models**, handlers at `go-creator-store/internal/handlers/`, **5% test coverage**, two open TODOs, and that TypeScript uses single quotes with arrow functions while Go uses tabs with `if err != nil`.
 
 ## Inspired by
 
 codeinsight was inspired by [mcp-thorns](https://github.com/AnEntrypoint/mcp-thorns) — a Node.js codebase analyzer that pioneered the idea of giving AI tools a one-shot project overview using tree-sitter AST analysis. mcp-thorns demonstrated that structured codebase context dramatically improves AI coding assistant performance.
 
-codeinsight builds on that foundation with a Rust implementation for faster analysis, additional detection capabilities (git context, security scanning, test mapping, data model detection), and framework-aware dead code analysis.
+codeinsight builds on that foundation with a Rust implementation for faster analysis, additional detection capabilities (git context, security scanning, test mapping, data model detection, convention detection), and framework-aware dead code analysis.
 
 ## Performance
 
@@ -78,10 +115,10 @@ cp target/release/codeinsight ~/.local/bin/
 Copy-Item target\release\codeinsight.exe $env:USERPROFILE\.local\bin\
 ```
 
-### From crates.io (coming soon)
+### From npm (coming soon)
 
 ```bash
-cargo install codeinsight
+npm install -g codeinsight
 ```
 
 ### Prebuilt binaries (coming soon)
@@ -96,31 +133,58 @@ Prebuilt binaries for Windows x64, macOS ARM, macOS Intel, and Linux x64 will be
 codeinsight /path/to/your/project
 ```
 
-This prints the full analysis to stdout. Pipe it to a file or use it in scripts:
+### JSON output
 
 ```bash
-# Save to file
-codeinsight ./my-project > analysis.md
+codeinsight --json /path/to/your/project
+```
 
-# Use with AI tools
-codeinsight ./my-project | pbcopy  # macOS — copies to clipboard
+Outputs structured JSON for programmatic consumption by CI pipelines, dashboards, or other tools.
+
+### Caching
+
+```bash
+# Analyze and cache the result
+codeinsight --cache /path/to/your/project
+
+# Read cached result instantly (no re-analysis)
+codeinsight --read-cache /path/to/your/project
+```
+
+The cache is written to `.codeinsight` in the project root. Use `--cache` in session-start hooks for instant reads on subsequent prompts.
+
+### Configuration
+
+Create a `.codeinsight.toml` in your project root to customize behavior:
+
+```toml
+[ignore]
+dirs = ["generated", "vendor", "legacy"]
+files = ["*.generated.ts", "*.min.js"]
+
+[limits]
+max_file_size = 200000
 ```
 
 ### With AI coding tools
 
 #### Claude Code
 
-Use codeinsight as part of a session-start hook or run it manually:
+Use codeinsight as part of a [sentinel-cc](https://github.com/faizelmahomed/sentinel-cc) session-start hook, or run it manually:
 
 ```bash
 codeinsight .
 ```
 
-The output is designed to be injected into Claude's context at session start, giving it full project understanding before the first interaction.
+The output is injected into Claude's context at session start, giving it full project understanding before the first interaction.
 
 #### Cursor / Copilot / Other
 
-Run codeinsight and paste the output into your AI tool's context or system prompt. The markdown format is designed to be token-efficient while maximizing information density.
+Run codeinsight and paste the output into your AI tool's context or system prompt:
+
+```bash
+codeinsight . | pbcopy  # macOS — copies to clipboard
+```
 
 #### CI / Code Review
 
@@ -130,122 +194,105 @@ Run codeinsight in CI to generate a project snapshot with each PR:
 codeinsight . > .codeinsight-report.md
 ```
 
-Use the Issues and Dead Code sections to flag problems in code review.
+Use the Issues section to flag problems in code review.
 
 ## Supported languages
 
-codeinsight uses tree-sitter grammars for accurate AST-level analysis. The following languages are fully supported:
+codeinsight uses tree-sitter grammars for accurate AST-level analysis:
 
 | Language | Extensions | Framework detection |
 |---|---|---|
 | JavaScript | `.js`, `.mjs`, `.cjs`, `.jsx` | React, Express, Fastify, Koa, Hono, Elysia |
 | TypeScript | `.ts`, `.tsx` | Next.js, Angular, Svelte, Nuxt, Remix, Astro |
-| Python | `.py` | Django, Flask, FastAPI (via requirements/pyproject) |
+| Python | `.py` | Django, Flask, FastAPI |
 | Go | `.go` | Gin, Echo, Fiber, Chi, Gorilla Mux |
-| Rust | `.rs` | Actix, Axum, Rocket (via Cargo.toml) |
+| Rust | `.rs` | Actix, Axum, Rocket |
 | C | `.c`, `.h` | — |
 | C++ | `.cpp`, `.cc`, `.cxx`, `.hpp` | — |
-| Java | `.java` | Spring (via pom.xml/build.gradle) |
-| Ruby | `.rb` | Rails (via Gemfile) |
+| Java | `.java` | Spring |
+| Ruby | `.rb` | Rails |
+| PHP | `.php` | Laravel, Symfony |
+| C# | `.cs` | .NET, ASP.NET |
 | JSON | `.json` | package.json, tsconfig.json parsed for metadata |
 
-Files over 200KB are automatically skipped (typically build artifacts or generated code).
+## Dependency graph
+
+codeinsight builds a full cross-language dependency graph with import resolution for:
+
+- **JavaScript/TypeScript**: ES modules, CommonJS `require()`, dynamic `import()`, tsconfig path aliases (`@/` imports), barrel re-export tracing through `index.ts` files
+- **Go**: package-level imports resolved to all files in the target package directory
+- **Python**: dot-notation imports (`from module.sub import thing`), relative imports, `__init__.py` resolution
+- **Rust**: `mod foo;` declarations resolved to `foo.rs` or `foo/mod.rs`
+
+The graph powers dead code detection (framework-aware — excludes Next.js pages, Go files, config files), circular dependency detection, coupling analysis, and entry point identification.
+
+## Convention detection
+
+codeinsight detects per-language coding conventions from actual code patterns:
+
+| Convention | JS/TS/TSX | Go | Python | Rust |
+|---|---|---|---|---|
+| Indent style | 2-space / 4-space / tabs | tabs | 4-space | 4-space |
+| Quote style | single / double | — | single / double | — |
+| Semicolons | yes / no | — | — | — |
+| Function style | arrow / declaration | — | — | — |
+| Export style | named / default | — | — | — |
+| Import style | @/ / relative | — | — | — |
+| File naming | kebab / camel / Pascal / snake | snake_case | snake_case | snake_case |
+| Error handling | — | if err != nil | — | ? / unwrap / expect |
+
+Output: one line per language, only showing conventions with a clear majority pattern.
+
+```
+Conventions[TS]: 2-space, single quotes, no semicolons, arrow functions, named exports, @/ imports
+Conventions[Go]: tabs, if err != nil, snake_case files
+```
 
 ## How it works
 
 ### 1. File discovery
 
-codeinsight walks the project directory using the `ignore` crate, which respects `.gitignore` rules. It automatically skips:
-
-- `node_modules`, `.git`, `dist`, `build`, `target`
-- `.next`, `.nuxt`, `coverage`, `__pycache__`
-- `.venv`, `vendor`, `.cache`, `.output`
-- Files over 200KB
+Walks the project directory respecting `.gitignore` rules. Automatically skips `node_modules`, `.git`, `dist`, `build`, `target`, `.next`, `__pycache__`, `vendor`, and other common build/cache directories. Respects `.codeinsight.toml` custom ignores.
 
 ### 2. Parallel parsing
 
-All discovered files are parsed in parallel using `rayon`. Each file is parsed with the appropriate tree-sitter grammar. This is where the speed comes from — tree-sitter parsing is fast, and parallelism saturates all CPU cores.
+All files are parsed in parallel using `rayon`. Each file gets the appropriate tree-sitter grammar. Parallelism saturates all CPU cores — this is why a 500-file project finishes in 180ms.
 
 ### 3. AST analysis
 
-For each file, codeinsight traverses the AST and extracts:
-
-- **Functions**: name, line number, parameter count, body length, structural hash (for duplication detection)
-- **Classes/structs/enums**: name, line number
-- **Imports/exports**: paths, names, CommonJS and ES module styles
-- **Call patterns**: which functions are called most, internal vs external
-- **Async patterns**: async/await usage, Promises, callbacks, .then/.catch chains
-- **Error handling**: try/catch blocks, throw statements
-- **Constants and global state**: module-level declarations
-- **Environment variables**: `process.env.X` references
-- **URLs and routes**: HTTP endpoints, API routes
-- **Storage patterns**: file I/O, JSON operations, SQL queries
-- **Event patterns**: emitters and listeners
-- **Identifiers**: all variable/function/type names with frequency counts
+Single traversal per file extracts: functions, classes, imports, exports, call patterns, async patterns, error handling, constants, global state, env vars, URLs, routes, storage patterns, event patterns, identifiers, and convention indicators (quotes, indentation, semicolons, function style, export style).
 
 ### 4. Dependency graph
 
-Import paths are resolved to actual files. codeinsight builds a full dependency graph showing:
+Resolves imports across all supported languages (JS/TS path aliases, Go package imports, Python dot imports, Rust mod declarations). Traces through barrel re-exports. Builds coupling metrics, detects circular dependencies, identifies orphaned files and entry points.
 
-- Which files import which
-- Which files are imported by others (coupling)
-- Circular dependency chains
-- Cross-module dependencies
-- Orphaned files (not imported by anything)
-- Entry points (imported by others but don't import anything)
+### 5. Additional analysis
 
-### 5. Dead code detection
+- **Data models**: Detects Prisma schemas, GORM structs, TypeORM/Drizzle/Mongoose/Sequelize entities
+- **Key locations**: Maps directories to roles (handlers, components, services, middleware, tests)
+- **Git context**: Branch, recent commits, uncommitted changes, most-changed files
+- **Tooling**: TypeScript config, linting, testing frameworks, CI/CD, Docker, env files
+- **Security**: eval() usage, potential hardcoded secrets, SQL injection patterns
+- **Test mapping**: Matches source files to test files by naming convention
+- **Conventions**: Per-language coding style detection
 
-Using the dependency graph, codeinsight identifies:
+### 6. Compact output
 
-- **Unused exports**: files that export functions but nothing imports them
-- **Orphaned files**: completely isolated files with no connections
-- **Possibly dead**: files used by only one other file (leaf nodes)
-- **Framework-aware**: Next.js pages (`page.tsx`, `layout.tsx`), Go files, and config files are excluded from false positive detection
-
-### 6. Additional scanners
-
-Beyond AST analysis, codeinsight runs text-level scanners for:
-
-- **Developer notes**: TODO, FIXME, HACK comments with file and line context
-- **Security signals**: `eval()` usage, potential hardcoded secrets (with false positive filtering for test files, JSX attributes, type definitions), SQL string interpolation
-- **Test mapping**: matches source files to their test files by naming convention
-
-### 7. Project context
-
-codeinsight reads project metadata from:
-
-- `package.json` (name, version, description, scripts, dependencies)
-- `go.mod` (module path, Go dependencies)
-- `tsconfig.json` (strict mode, target)
-- CI configuration files (GitHub Actions, GitLab CI, etc.)
-- Docker files
-- Environment files (`.env`, `.env.example`)
-- README files (first paragraph excerpt)
-
-It scans subdirectories one level deep to detect monorepo structures with multiple package.json or go.mod files.
-
-### 8. Compact formatting
-
-All analysis results are formatted into a single markdown document optimized for AI consumption:
-
-- Sections only appear when they contain meaningful data
-- Lists are capped (typically 5-15 items) with `(+N)` overflow indicators
-- File paths are shortened to filenames where unambiguous
-- Numeric values use `k` suffix for thousands
-- Emoji section headers for quick visual scanning
-- The entire output is typically 1,500-3,000 tokens — less than what an AI would spend exploring the codebase manually
+Formatted for LLM consumption: no emojis, no markdown overhead, no legends. Self-describing labels. Full reference data (all env vars, all routes, all models). Typically ~900 tokens for a 500-file project.
 
 ## Architecture
 
 ```
 src/
-  main.rs          — entry point, file collection, parallel dispatch
-  lang.rs          — tree-sitter grammar registry (11 languages)
-  analyzer.rs      — AST traversal and entity extraction
-  depgraph.rs      — dependency graph, dead code, circular dep detection
-  formatter.rs     — compact markdown output generation
-  project.rs       — package.json / go.mod / project metadata
+  main.rs          — entry point, file collection, parallel dispatch, CLI flags
+  lang.rs          — tree-sitter grammar registry (13 languages)
+  analyzer.rs      — AST traversal, entity extraction, convention counting
+  depgraph.rs      — dependency graph, import resolution, dead code detection
+  formatter.rs     — compact LLM-optimized text output
+  json_output.rs   — structured JSON output
+  project.rs       — package.json / go.mod / tsconfig.json metadata
+  config.rs        — .codeinsight.toml configuration loading
+  conventions.rs   — per-language convention aggregation
   git.rs           — git context (branch, commits, hot files)
   tooling.rs       — CI, linting, testing framework detection
   scanner.rs       — TODO/FIXME/HACK, security signals, test mapping
@@ -275,28 +322,7 @@ The investment is one sentence. The payoff is every AI interaction on your codeb
 
 ## Contributing
 
-Contributions are welcome. Please open an issue first to discuss what you'd like to change.
-
-### Building from source
-
-```bash
-git clone https://github.com/faizelmahomed/codeinsight.git
-cd codeinsight
-cargo build --release
-cargo test
-```
-
-### Adding a new language
-
-1. Add the tree-sitter grammar crate to `Cargo.toml`
-2. Add the extension mapping in `src/lang.rs`
-3. The analyzer, dependency graph, and formatter work automatically for any tree-sitter grammar
-
-### Running on your own project
-
-```bash
-cargo run --release -- /path/to/your/project
-```
+Contributions are welcome. Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
