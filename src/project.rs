@@ -29,21 +29,35 @@ pub fn analyze_project(root: &Path) -> ProjectContext {
         parse_package_json(&content, &mut ctx);
     }
 
-    for name in &["README.md", "readme.md", "README.txt", "README"] {
-        let readme_path = root.join(name);
-        if let Ok(content) = fs::read_to_string(&readme_path) {
-            let excerpt: String = content
-                .split("\n\n")
-                .take(2)
-                .collect::<Vec<_>>()
-                .join(" ")
-                .replace('\n', " ")
-                .trim_start_matches(|c: char| c == '#' || c == ' ')
-                .chars()
-                .take(300)
-                .collect();
-            ctx.readme_excerpt = Some(excerpt.trim().to_string());
-            break;
+    // Check root and immediate subdirs for README
+    let mut readme_dirs = vec![root.to_path_buf()];
+    if let Ok(entries) = fs::read_dir(root) {
+        for entry in entries.flatten() {
+            if entry.path().is_dir() {
+                readme_dirs.push(entry.path());
+            }
+        }
+    }
+    'readme: for dir in &readme_dirs {
+        for name in &["README.md", "readme.md", "README.txt", "README"] {
+            let readme_path = dir.join(name);
+            if let Ok(content) = fs::read_to_string(&readme_path) {
+                let excerpt: String = content
+                    .split("\n\n")
+                    .take(2)
+                    .collect::<Vec<_>>()
+                    .join(" ")
+                    .replace('\n', " ")
+                    .trim_start_matches(|c: char| c == '#' || c == ' ')
+                    .chars()
+                    .take(300)
+                    .collect();
+                let trimmed = excerpt.trim().to_string();
+                if !trimmed.is_empty() {
+                    ctx.readme_excerpt = Some(trimmed);
+                    break 'readme;
+                }
+            }
         }
     }
 
@@ -81,11 +95,30 @@ pub fn analyze_project(root: &Path) -> ProjectContext {
             // Check subdirectory package.json
             let sub_pkg = path.join("package.json");
             if let Ok(content) = fs::read_to_string(&sub_pkg) {
-                let all_deps = format!("{}", content);
                 for (dep, name) in js_frameworks {
-                    if all_deps.contains(&format!("\"{}\"", dep)) && !ctx.frameworks.contains(&name.to_string()) {
+                    if content.contains(&format!("\"{}\"", dep)) && !ctx.frameworks.contains(&name.to_string()) {
                         ctx.frameworks.push(name.to_string());
                     }
+                }
+                // Extract scripts if root had none
+                if ctx.scripts.is_empty() {
+                    let dir_name = path.file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_default();
+                    for script_name in &["start", "dev", "build", "test"] {
+                        if let Some(val) = extract_script(&content, script_name) {
+                            ctx.scripts.insert(
+                                script_name.to_string(),
+                                format!("cd {} && {}", dir_name, val),
+                            );
+                        }
+                    }
+                }
+                // Use subdir project info if root had none
+                if ctx.name.is_none() {
+                    ctx.name = extract_string(&content, "name");
+                    ctx.version = extract_string(&content, "version");
+                    ctx.description = extract_string(&content, "description");
                 }
             }
 
@@ -93,6 +126,28 @@ pub fn analyze_project(root: &Path) -> ProjectContext {
             let sub_gomod = path.join("go.mod");
             if let Ok(content) = fs::read_to_string(&sub_gomod) {
                 parse_go_mod(&content, &mut ctx);
+                // Detect Go entry point
+                let dir_name = path.file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                let cmd_dir = path.join("cmd");
+                if cmd_dir.is_dir() {
+                    if let Ok(cmds) = fs::read_dir(&cmd_dir) {
+                        for cmd in cmds.flatten() {
+                            if cmd.path().is_dir() {
+                                let cmd_name = cmd.file_name().to_string_lossy().to_string();
+                                if !ctx.scripts.contains_key("run") {
+                                    ctx.scripts.insert(
+                                        "run".into(),
+                                        format!("cd {} && go run ./cmd/{}", dir_name, cmd_name),
+                                    );
+                                }
+                            }
+                        }
+                    }
+                } else if path.join("main.go").exists() && !ctx.scripts.contains_key("run") {
+                    ctx.scripts.insert("run".into(), format!("cd {} && go run .", dir_name));
+                }
             }
         }
     }

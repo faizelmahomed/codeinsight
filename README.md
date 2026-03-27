@@ -253,6 +253,26 @@ src/
   locations.rs     — key directory pattern recognition
 ```
 
+## Why your README matters
+
+codeinsight reads your project's README and includes an excerpt in the output. This gives AI tools something code analysis alone can never provide: the **purpose and intent** behind your project.
+
+Code tells an AI *what* the project does technically. The README tells it *why* it exists, *who* it's for, and *what problem* it solves. An AI that knows "this is a stan.store alternative for the Saudi Arabian market" makes fundamentally different decisions than one that only sees "Next.js + Go + Stripe."
+
+If your project doesn't have a README, or has a bare-bones one, codeinsight can't provide this context and the AI assistant starts with a purely technical view of your code. A good first paragraph in your README — one or two sentences explaining what the project is and who it's for — dramatically improves the quality of AI-assisted development on your codebase.
+
+**A good README first paragraph looks like:**
+- "A marketplace platform for creators to sell digital products, built for the Saudi Arabian market."
+- "Internal CLI tool that generates compliance reports from our PostgreSQL audit logs."
+- "React component library implementing our company's design system."
+
+**A poor README first paragraph (from the AI's perspective):**
+- "## Installation\n\nnpm install my-project" (no context about what the project does)
+- "TODO: add description" (nothing to work with)
+- No README at all
+
+The investment is one sentence. The payoff is every AI interaction on your codebase understanding the context.
+
 ## Contributing
 
 Contributions are welcome. Please open an issue first to discuss what you'd like to change.
